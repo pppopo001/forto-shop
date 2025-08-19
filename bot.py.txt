@@ -1,0 +1,185 @@
+import os
+import sqlite3
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, filters,
+    ContextTypes, ConversationHandler
+)
+
+# ---------------------- تنظیمات ----------------------
+TOKEN = os.getenv("7891292032:AAFuMbeIJqwFGp690OmS7XTv95jAe33WEWk")
+ADMIN_USERNAMES = ["MR_PR_001", "Forto_Support"]  # لیست ادمین‌ها
+SUPPORT_USERNAME = "Forto_Support"                # یوزرنیم پشتیبانی
+
+# ---------------------- دیتابیس ----------------------
+conn = sqlite3.connect("accounts.db", check_same_thread=False)
+cursor = conn.cursor()
+cursor.execute("""CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    description TEXT,
+    price TEXT,
+    vbucks TEXT,
+    stw TEXT,
+    account_type TEXT,
+    platform TEXT,
+    warranty TEXT
+)""")
+conn.commit()
+
+# ---------------------- مراحل ادمین ----------------------
+(NAME, DESCRIPTION, PRICE, VBUCKS, STW, ACCOUNT_TYPE, PLATFORM, WARRANTY) = range(8)
+
+# ---------------------- خوش آمدگویی ----------------------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_first_name = update.message.from_user.first_name
+    keyboard = [
+        ["🛒 خرید اکانت", "📝 روش‌های خرید"],
+        ["ℹ️ درباره ما", "📞 پشتیبانی"],
+        ["📦 سفارش‌های من"]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+    welcome_text = (
+        f"🎮 سلام {user_first_name}! به *فورتو شاپ* خوش اومدی 👋\n\n"
+        "🔥 جایی که می‌تونی بهترین و مطمئن‌ترین اکانت‌های فورتنایت رو پیدا کنی!\n\n"
+        "✅ اکانت‌های تضمینی با قیمت مناسب\n"
+        "✅ تحویل سریع\n"
+        "✅ پشتیبانی ۲۴ ساعته\n\n"
+        "برای شروع، از دکمه‌های پایین استفاده کن 👇"
+    )
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup, parse_mode="Markdown")
+
+# ---------------------- پنل ادمین ----------------------
+async def add_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.from_user.username not in ADMIN_USERNAMES:
+        await update.message.reply_text("⛔ شما اجازه این کار را ندارید.")
+        return ConversationHandler.END
+    await update.message.reply_text("لطفاً اسم اکانت را وارد کنید:")
+    return NAME
+
+async def add_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['name'] = update.message.text
+    await update.message.reply_text("توضیحات اکانت را وارد کنید:")
+    return DESCRIPTION
+
+async def add_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['description'] = update.message.text
+    await update.message.reply_text("قیمت اکانت را وارد کنید:")
+    return PRICE
+
+async def add_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['price'] = update.message.text
+    await update.message.reply_text("تعداد V-Bucks اکانت را وارد کنید:")
+    return VBUCKS
+
+async def add_vbucks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['vbucks'] = update.message.text
+    await update.message.reply_text("آیا اکانت Save the World دارد؟ (بله / خیر)")
+    return STW
+
+async def add_stw(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['stw'] = update.message.text
+    await update.message.reply_text("نوع اکانت را وارد کنید (قانونی / کرکی):")
+    return ACCOUNT_TYPE
+
+async def add_account_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['account_type'] = update.message.text
+    await update.message.reply_text("پلتفرم اکانت را وارد کنید (All / PS / Xbox / PC…):")
+    return PLATFORM
+
+async def add_platform(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['platform'] = update.message.text
+    await update.message.reply_text("ضمانت اکانت را وارد کنید (مثلاً مادام / ۷ روز / بدون ضمانت):")
+    return WARRANTY
+
+async def add_warranty(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['warranty'] = update.message.text
+    # ذخیره در دیتابیس
+    cursor.execute("""INSERT INTO accounts 
+        (name, description, price, vbucks, stw, account_type, platform, warranty) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            context.user_data['name'],
+            context.user_data['description'],
+            context.user_data['price'],
+            context.user_data['vbucks'],
+            context.user_data['stw'],
+            context.user_data['account_type'],
+            context.user_data['platform'],
+            context.user_data['warranty']
+        )
+    )
+    conn.commit()
+    # جمع‌بندی
+    summary = (
+        f"✅ آگهی اکانت آماده شد:\n"
+        f"اسم: {context.user_data['name']}\n"
+        f"توضیحات: {context.user_data['description']}\n"
+        f"قیمت: {context.user_data['price']}\n"
+        f"V-Bucks: {context.user_data['vbucks']}\n"
+        f"Save the World: {context.user_data['stw']}\n"
+        f"نوع اکانت: {context.user_data['account_type']}\n"
+        f"پلتفرم: {context.user_data['platform']}\n"
+        f"ضمانت: {context.user_data['warranty']}"
+    )
+    await update.message.reply_text(summary)
+    return ConversationHandler.END
+
+# ---------------------- نمایش اکانت‌ها ----------------------
+async def show_accounts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cursor.execute("SELECT * FROM accounts")
+    accounts = cursor.fetchall()
+    if not accounts:
+        await update.message.reply_text("📭 هنوز هیچ اکانتی برای فروش ثبت نشده.")
+        return
+    text = "🛒 لیست اکانت‌های موجود:\n\n"
+    for acc in accounts:
+        text += f"🔹 {acc[1]} | {acc[3]} تومان | {acc[6]} | {acc[7]} | V-Bucks: {acc[4]} | STW: {acc[5]} | ضمانت: {acc[8]}\n"
+    await update.message.reply_text(text)
+
+# ---------------------- روش‌های خرید ----------------------
+async def purchase_methods(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "💳 روش‌های خرید اکانت از فورتو شاپ:\n\n"
+        f"1️⃣ ارسال پیام مستقیم به ادمین: [@{SUPPORT_USERNAME}](https://t.me/{SUPPORT_USERNAME})\n"
+        "2️⃣ استفاده از سایت: 🌐 http://Fortoshop.ir\n"
+        "3️⃣ خرید مستقیم از خود ربات 🛒"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+# ---------------------- پشتیبانی ----------------------
+async def support(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(f"برای پشتیبانی مستقیم روی لینک زیر کلیک کنید:\nhttps://t.me/{SUPPORT_USERNAME}")
+
+# ---------------------- main ----------------------
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    # ConversationHandler برای ادمین
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("add", add_start)],
+        states={
+            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_name)],
+            DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_description)],
+            PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_price)],
+            VBUCKS: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_vbucks)],
+            STW: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_stw)],
+            ACCOUNT_TYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_account_type)],
+            PLATFORM: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_platform)],
+            WARRANTY: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_warranty)],
+        },
+        fallbacks=[]
+    )
+    app.add_handler(conv_handler)
+
+    # دستورات و دکمه‌ها
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.Regex("🛒 خرید اکانت"), show_accounts))
+    app.add_handler(MessageHandler(filters.Regex("📝 روش‌های خرید"), purchase_methods))
+    app.add_handler(MessageHandler(filters.Regex("📞 پشتیبانی"), support))
+
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
